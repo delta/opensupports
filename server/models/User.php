@@ -15,9 +15,29 @@ class User extends DataStore {
     const TABLE = 'user';
 
     public static function authenticate($userEmail, $userPassword) {
+	$username = explode("@", $userEmail)[0];
+        exec('python /var/www/delta/support/nitt_imap_login.py ' . $username . ' ' . $userPassword, $output, $exit_code);
+        if ($exit_code == 1) {
+            return new NullDataStore();
+        } 
         $user = User::getUser($userEmail, 'email');
+        if ($user->isNull()) {
+	    $verificationToken = Hashing::generateRandomToken();
+            $newUser = new User();
+            $newUser->setProperties([
+	        'name' => $username,
+		'signupDate' => Date::getCurrentDate(),
+		'tickets' => 0,
+		'email' => $userEmail,
+		'password' => '',
+		'verificationToken' => (MailSender::getInstance()->isConnected()) ? $verificationToken : null
+	    ]);
 
-        return ($user && Hashing::verifyPassword($userPassword, $user->password)) ? $user : new NullDataStore();
+	    $userId = $newUser->store();
+            Log::createLog('SIGNUP', null, User::getDataStore($userId));
+            return $newUser;
+        }
+        return $user;
     }
 
     public static function getProps() {
